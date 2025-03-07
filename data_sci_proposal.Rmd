@@ -1,0 +1,115 @@
+---
+title: "data_science_proposal"
+output: html_document
+date: "2024-11-24"
+---
+
+# I gave all the libraries but we don’t need all of them
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+
+# put your path name
+data <- read.csv("/users/zenil/Downloads/ds.csv")
+
+
+# inspecting the structure
+str(data)
+
+
+
+#cleaning the data (before analysis one)
+data <- data %>%
+  filter(!is.na(inspection_score), !is.na(risk_category))
+
+data$inspection_date <- as.Date(data$inspection_date, format="%Y-%m-%d")
+data$risk_category <- as.factor(data$risk_category)
+
+data <- data %>%
+  distinct()
+data <- data %>%
+  filter(inspection_score >= 0 & inspection_score <= 100)
+
+
+# View cleaned data 
+summary(data)
+
+
+# top 10 violations graph
+top_violations <- data %>%
+  filter(!is.na(violation_description) & violation_description != "") %>%
+  group_by(violation_description) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1:10)
+
+ggplot(top_violations, aes(x = reorder(violation_description, count), y = count)) +
+  geom_bar(stat = "identity", fill = "orange", alpha = 0.7) +
+  coord_flip() +
+  labs(title = "Top 10 Violations", x = "Violation Description", y = "Count") +
+  theme_minimal()
+
+
+# risk category vs count graph
+risk_clean <- data %>%
+  filter(!is.na(risk_category) & risk_category != "")
+
+ggplot(risk_clean, aes(x = risk_category)) +
+  geom_bar(fill = "red", alpha = 0.7) +
+  labs(title = "Violations by Risk Category", x = "Risk Category", y = "Count") +
+  theme_minimal()
+
+
+# map
+if (!require(leaflet)) install.packages("leaflet")
+
+library(leaflet)
+
+map_data <- data %>%
+  filter(!is.na(business_latitude) & !is.na(business_longitude)) %>%
+  mutate(popup_info = paste0(
+    "<b>Business Name:</b> ", business_name, "<br>",
+    "<b>Address:</b> ", business_address, "<br>",
+    "<b>City:</b> ", business_city, "<br>",
+    "<b>Inspection Score:</b> ", inspection_score
+  ))
+
+leaflet(map_data) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~business_longitude,
+    lat = ~business_latitude,
+    popup = ~popup_info,
+    color = ~ifelse(inspection_score >= 90, "green",
+                    ifelse(inspection_score >= 70, "orange", "red")),
+    radius = 5,
+    fillOpacity = 0.7
+  ) %>%
+  addLegend(
+    "bottomright",
+    colors = c("green", "orange", "red"),
+    labels = c("90+ (Excellent)", "70-89 (Moderate)", "<70 (Needs Improvement)"),
+    title = "Inspection Score"
+  ) %>%
+  setView(
+    lng = mean(map_data$business_longitude, na.rm = TRUE),
+    lat = mean(map_data$business_latitude, na.rm = TRUE),
+    zoom = 12
+  )
+
+# business location scatterplot
+
+hist_data <- read.csv("/users/zenil/Downloads/ds.csv")
+
+business_data <- na.omit(hist_data)
+
+plot(
+  business_data$business_latitude, 
+  business_data$business_longitude, 
+  xlab = "Latitude", 
+  ylab = "Longitude", 
+  main = "Business Locations"
+)
